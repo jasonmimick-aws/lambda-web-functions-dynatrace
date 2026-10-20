@@ -113,6 +113,69 @@ heading(fig, "Throughput at steady load",
 fig.text(0.015, 0.02, "Source: measured POC, us-east-1", color=MUTE, fontsize=8)
 fig.savefig(os.path.join(OUT, "fig3-throughput.png"), dpi=160); plt.close(fig)
 
+# =========================================================================
+# Figure 4 - direct cost vs utilization (break-even)
+# =========================================================================
+U = np.linspace(0, 100, 101)
+F = 60.0              # Fargate: flat monthly baseline (2x0.5 vCPU + ALB), illustrative
+SLOPE = 0.70          # Web Functions: cost tracks active-CPU utilization
+web = SLOPE * U
+be = F / SLOPE        # break-even utilization
+fig, ax = plt.subplots(figsize=(8.6, 4.8)); fig.subplots_adjust(top=0.74, bottom=0.14, left=0.1, right=0.96)
+style(ax)
+ax.axvspan(0, be, color=WEBFN, alpha=0.07, zorder=0)
+ax.axvspan(be, 100, color=FARGATE, alpha=0.07, zorder=0)
+ax.axvspan(5, 30, color=GREEN, alpha=0.12, zorder=0)
+ax.plot(U, [F]*len(U), color=FARGATE, lw=3, zorder=3)
+ax.plot(U, web, color=WEBFN, lw=3, zorder=3)
+ax.axvline(be, color=MUTE, ls="--", lw=1.2, zorder=2)
+ax.text(be, 77, f"break-even ~{be:.0f}%", color=TXT, fontsize=9.5, ha="center", fontweight="bold")
+ax.text(52, 63, "Fargate (flat)", color=FARGATE, fontsize=10.5, fontweight="bold")
+ax.text(60, 50, "Web Functions (active-CPU)", color=WEBFN, fontsize=10.5, fontweight="bold", va="center")
+ax.text(17.5, 6, "typical web / API / GenAI\n5-30% utilization", color=GREEN, fontsize=9.5, ha="center", fontweight="bold")
+ax.text(42, 70, "Web Functions cheaper", color=WEBFN, fontsize=10, ha="center")
+ax.text(93, 30, "Fargate\ncheaper", color=FARGATE, fontsize=10, ha="center")
+ax.set_xlim(0, 100); ax.set_ylim(0, 85)
+ax.set_xlabel("sustained CPU utilization (%)"); ax.set_ylabel("relative monthly cost (USD)")
+heading(fig, "Direct cost vs utilization",
+        "Fargate is flat regardless of traffic; Web Functions tracks active CPU. Illustrative - validate on the AWS Pricing Calculator.")
+fig.savefig(os.path.join(OUT, "fig4-cost-utilization.png"), dpi=160); plt.close(fig)
+
+# =========================================================================
+# Figure 5 - monthly cost by workload shape
+# =========================================================================
+labels = ["Steady 24/7\nCPU batch", "Business-hours\nI/O API", "Bursty GenAI\nendpoint"]
+far = [60, 60, 60]; web = [70, 15, 8]
+x = np.arange(len(labels)); w = 0.34
+fig, ax = plt.subplots(figsize=(8.6, 4.8)); fig.subplots_adjust(top=0.74, bottom=0.14, left=0.1, right=0.96)
+style(ax)
+ax.bar(x - w/2, far, w, color=FARGATE, zorder=3)
+ax.bar(x + w/2, web, w, color=WEBFN, zorder=3)
+for xi, v in zip(x - w/2, far): ax.text(xi, v + 1.5, f"${v}", ha="center", color=FARGATE, fontweight="bold", fontsize=10)
+for xi, v in zip(x + w/2, web): ax.text(xi, v + 1.5, f"${v}", ha="center", color=WEBFN, fontweight="bold", fontsize=10)
+ax.set_xticks(x); ax.set_xticklabels(labels, color=TXT, fontsize=11)
+ax.set_ylim(0, 82); ax.set_ylabel("relative monthly cost (USD)")
+legend_dots(ax, [("Fargate", FARGATE), ("Web Functions", WEBFN)], anchor=(0.0, 0.99))
+heading(fig, "Monthly cost by workload shape",
+        "Steady CPU favors provisioned; the common bursty / I/O / GenAI cases are several times cheaper. Illustrative.")
+fig.savefig(os.path.join(OUT, "fig5-cost-scenarios.png"), dpi=160); plt.close(fig)
+
+# =========================================================================
+# Figure 6 - operational surface (maintenance / TCO)
+# =========================================================================
+fig, ax = plt.subplots(figsize=(8.6, 3.2)); fig.subplots_adjust(top=0.70, bottom=0.14, left=0.26, right=0.95)
+style(ax, yaxis=False)
+plats = ["Web Functions", "Fargate"]; comps = [1, 7]; cols = [WEBFN, FARGATE]
+y = np.arange(len(plats))
+ax.barh(y, comps, height=0.5, color=cols, zorder=3)
+ax.text(1 + 0.1, 0, "1  (one deploy command)", va="center", color=WEBFN, fontweight="bold", fontsize=11)
+ax.text(7 + 0.1, 1, "7  (image, ECR, cluster, ALB+TG, autoscaling, task defs, patching)", va="center", color=FARGATE, fontweight="bold", fontsize=10)
+ax.set_yticks(y); ax.set_yticklabels(plats, color=TXT, fontsize=12)
+ax.set_xlim(0, 11); ax.set_ylim(-0.6, 1.6); ax.set_xlabel("components to own and maintain")
+heading(fig, "Operational surface (what you maintain)",
+        "The indirect cost that dominates TCO at fleet scale.")
+fig.savefig(os.path.join(OUT, "fig6-ops-surface.png"), dpi=160); plt.close(fig)
+
 print("charts written:")
 for f in sorted(os.listdir(OUT)):
     if f.endswith(".png"): print(" -", f)

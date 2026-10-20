@@ -50,11 +50,23 @@ Two conclusions follow that are specific to CPU-bound work. First, active-CPU bi
 
 The document-summarization endpoint issues many concurrent model calls and then streams a combined result. Each request spends most of its wall-clock duration waiting on the model. Under active-CPU billing this waiting time incurs negligible compute cost, and the long-lived streaming response is served directly. Per-call latency was equivalent on both platforms because both call the same model. The economic and architectural advantage lies in the billing model and in native support for streaming, not in model performance.
 
-## 4. Cost analysis
+## 4. Cost analysis and economic conclusions
 
-The cost difference is structural rather than promotional. Fargate bills for provisioned vCPU-hours and memory gigabyte-hours, together with the load balancer, continuously and independently of traffic. For a small always-on service (two tasks of 0.5 vCPU, approximately 2 GB of memory, and one load balancer) the baseline is on the order of 50 to 55 US dollars per month before any requests are served. This figure is illustrative for the us-east-1 region and should be confirmed with the AWS Pricing Calculator. Lambda Web Functions bill for active CPU time, for memory over the lifetime of each execution environment, and per request. Cost therefore scales with actual work and approaches zero during idle periods.
+The cost difference is structural rather than promotional. Fargate bills for provisioned vCPU-hours and memory gigabyte-hours, together with the load balancer, continuously and independently of traffic. For the small two-task baseline used here the cost is on the order of 60 US dollars per month before any request is served (illustrative, us-east-1; confirm with the AWS Pricing Calculator). Lambda Web Functions bill for active CPU time, for memory over the lifetime of each execution environment, and per request, so cost scales with actual work and approaches zero during idle periods.
 
-The determining variable is the product of utilization and traffic shape. Workloads with low average utilization, bursty arrival patterns, or input/output-bound and model-bound requests favor active-CPU billing, because charges are not incurred during idle periods or during waiting time. Workloads that sustain near-complete CPU utilization continuously may be less expensive on provisioned capacity, because there is no idle capacity to reclaim and active CPU time approximates wall-clock time. A precise figure for a specific service should be produced by metering its active CPU milliseconds, memory gigabyte-seconds, and request count during the validation run, and by pricing both platforms against current AWS rates. A generic estimate should not be substituted for this measurement.
+Figure 4 shows the consequence. Fargate cost is flat with respect to utilization, while Web Functions cost rises with the fraction of time the service actually consumes CPU. The two cross only near sustained high utilization. Web, API, and generative-AI services sit well below that break-even because they spend most of each request waiting on input/output or on a model, and are idle outside peak hours, so Web Functions is less expensive for them, often by a large factor.
+
+![Figure 4](one-pager-assets/fig4-cost-utilization.png)
+
+Figure 5 applies this to three representative workloads. A service pinned at high CPU around the clock slightly favors provisioned capacity. The common cases, a business-hours input/output-bound API and a bursty generative-AI endpoint, are several times cheaper on Web Functions because idle time and waiting time are not billed.
+
+![Figure 5](one-pager-assets/fig5-cost-scenarios.png)
+
+The second economic lever is operational cost, which does not appear on the AWS invoice but dominates total cost of ownership. Operating the service on Fargate requires owning a container image, a registry, a cluster, a load balancer and target group, an autoscaling policy, task definitions, and base-image patching. The Web Function requires one deploy command (Figure 6). Across a fleet of hundreds of small services, the reduction in engineering time and in the patch and attack surface is material.
+
+![Figure 6](one-pager-assets/fig6-ops-surface.png)
+
+Economic conclusion. For the recommended workload class the two levers compound: Web Functions lowers the direct bill, because cost tracks usage rather than provisioned peak, and lowers the indirect cost, because there is almost nothing to operate. The recommendation to migrate stateless, input/output-bound, bursty, and generative-AI Node services is therefore supported on cost as well as on performance, with the single documented exception of workloads that sustain high CPU utilization continuously, where provisioned capacity remains cheaper. A precise figure for a specific service should still be produced by metering its active CPU milliseconds, memory gigabyte-seconds, and request count during the validation run and pricing both platforms against current AWS rates. A generic estimate should not be substituted for this measurement.
 
 ## 5. Limitations and exclusions
 
@@ -72,7 +84,7 @@ The migration decision depends on tail latency, concurrency behavior, and downst
 
 ## 7. Conclusion
 
-For stateless, input/output-bound, bursty, or generative-AI Node.js services, AWS Lambda Web Functions deliver performance equivalent to a provisioned container service through the 99th percentile, with higher throughput at equal provisioning, a cold-start cost confined to the extreme tail, and a billing model that scales with actual work. The appropriate course of action is a measured, per-workload validation using the procedure in Section 2, with Dynatrace confirming parity and governing the cutover, rather than a general migration.
+For stateless, input/output-bound, bursty, or generative-AI Node.js services, AWS Lambda Web Functions deliver performance equivalent to a provisioned container service through the 99th percentile, with higher throughput at equal provisioning and a cold-start cost confined to the extreme tail. They also lower total cost of ownership for these workloads on two independent levers: a direct bill that scales with actual work rather than provisioned peak, and a near-elimination of the operational surface that must be maintained. The appropriate course of action is a measured, per-workload validation using the procedure in Section 2, with Dynatrace confirming parity and governing the cutover, rather than a general migration.
 
 ## Appendix
 
