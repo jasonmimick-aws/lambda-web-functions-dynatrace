@@ -1,0 +1,205 @@
+name: "AWS Lambda Web Functions — Dynatrace POC"
+type: dashboard
+content:
+  version: 21
+  annotations: []
+  importedWithCode: false
+  variables: []
+  settings:
+    defaultTimeframe:
+      enabled: true
+      value:
+        from: now()-2h
+        to: now()
+  tiles:
+    "0":
+      type: markdown
+      content: |
+        # AWS Lambda Web Functions — Dynatrace POC
+        Observability for a **Lambda Web Function** (new HTTP-native Lambda form factor, `nodejs24.x` on Arm64, us-east-1) instrumented with **OpenTelemetry → Dynatrace**.
+        Service `lambda-web-poc` · traces + RED metrics via OTLP. Routes: `/`, `/api/products`, `/api/products/:id` (I/O), `/api/slow` (slow I/O), `/api/error` (fault injection).
+    "1":
+      type: data
+      title: "Total requests"
+      query: |
+        fetch spans
+        | filter service.name == "lambda-web-poc" and span.kind == "server"
+        | summarize total = count()
+      visualization: singleValue
+      visualizationSettings:
+        autoSelectVisualization: false
+        singleValue:
+          showSparkline: false
+      davis:
+        enabled: false
+    "2":
+      type: data
+      title: "Error rate %"
+      query: |
+        fetch spans
+        | filter service.name == "lambda-web-poc" and span.kind == "server"
+        | summarize total = count(), failed = countIf(request.is_failed == true)
+        | fieldsAdd errorRate = round(failed * 100.0 / total, decimals: 2)
+        | fields errorRate
+      visualization: singleValue
+      visualizationSettings:
+        autoSelectVisualization: false
+        singleValue:
+          showSparkline: false
+        thresholds:
+          - field: errorRate
+            rules:
+              - color: "#7dc540"
+                comparator: "<"
+                value: 1
+              - color: "#f5d30f"
+                comparator: ">="
+                value: 1
+              - color: "#dc172a"
+                comparator: ">="
+                value: 5
+      davis:
+        enabled: false
+    "3":
+      type: data
+      title: "p95 latency (ms)"
+      query: |
+        fetch spans
+        | filter service.name == "lambda-web-poc" and span.kind == "server"
+        | fieldsAdd durMs = toDouble(duration) / 1000000.0
+        | summarize p95 = round(percentile(durMs, 95), decimals: 1)
+      visualization: singleValue
+      visualizationSettings:
+        autoSelectVisualization: false
+        singleValue:
+          showSparkline: false
+      davis:
+        enabled: false
+    "4":
+      type: data
+      title: "Avg latency (ms)"
+      query: |
+        fetch spans
+        | filter service.name == "lambda-web-poc" and span.kind == "server"
+        | fieldsAdd durMs = toDouble(duration) / 1000000.0
+        | summarize avgMs = round(avg(durMs), decimals: 1)
+      visualization: singleValue
+      visualizationSettings:
+        autoSelectVisualization: false
+        singleValue:
+          showSparkline: false
+      davis:
+        enabled: false
+    "5":
+      type: data
+      title: "Request rate by route"
+      query: |
+        timeseries req = sum(app.requests), by: { `http.route` }
+      visualization: lineChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "6":
+      type: data
+      title: "Requests by status code"
+      query: |
+        fetch spans
+        | filter service.name == "lambda-web-poc" and span.kind == "server"
+        | summarize count = count(), by: { `http.response.status_code` }
+      visualization: donutChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "7":
+      type: data
+      title: "Latency percentiles (ms)"
+      query: |
+        fetch spans
+        | filter service.name == "lambda-web-poc" and span.kind == "server"
+        | fieldsAdd durMs = toDouble(duration) / 1000000.0
+        | makeTimeseries p50 = percentile(durMs, 50), p95 = percentile(durMs, 95), p99 = percentile(durMs, 99)
+      visualization: lineChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "8":
+      type: data
+      title: "Errors over time by route"
+      query: |
+        timeseries errors = sum(app.errors), by: { `http.route` }
+      visualization: barChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "9":
+      type: data
+      title: "Route breakdown"
+      query: |
+        fetch spans
+        | filter service.name == "lambda-web-poc" and span.kind == "server"
+        | summarize requests = count(),
+            avgMs = round(avg(toDouble(duration) / 1000000.0), decimals: 1),
+            p95Ms = round(percentile(toDouble(duration) / 1000000.0, 95), decimals: 1),
+            failed = countIf(request.is_failed == true),
+            by: { `http.route` }
+        | sort requests desc
+      visualization: table
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+  layouts:
+    "0":
+      x: 0
+      "y": 0
+      w: 24
+      h: 2
+    "1":
+      x: 0
+      "y": 2
+      w: 6
+      h: 4
+    "2":
+      x: 6
+      "y": 2
+      w: 6
+      h: 4
+    "3":
+      x: 12
+      "y": 2
+      w: 6
+      h: 4
+    "4":
+      x: 18
+      "y": 2
+      w: 6
+      h: 4
+    "5":
+      x: 0
+      "y": 6
+      w: 12
+      h: 6
+    "6":
+      x: 12
+      "y": 6
+      w: 12
+      h: 6
+    "7":
+      x: 0
+      "y": 12
+      w: 12
+      h: 6
+    "8":
+      x: 12
+      "y": 12
+      w: 12
+      h: 6
+    "9":
+      x: 0
+      "y": 18
+      w: 24
+      h: 6

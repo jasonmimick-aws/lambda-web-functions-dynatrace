@@ -1,0 +1,183 @@
+name: "Fargate → Lambda Web Functions — Transformation (Dynatrace)"
+id: f3ca99fa-72b5-47c1-9420-6a83e8d0c104
+type: dashboard
+content:
+  version: 21
+  annotations: []
+  importedWithCode: false
+  variables: []
+  settings:
+    defaultTimeframe:
+      enabled: true
+      value:
+        from: now()-2h
+        to: now()
+  tiles:
+    "0":
+      type: markdown
+      content: |
+        # Fargate → Lambda Web Functions — same code, measured under load
+        One service (`doc-intel-api`) running **unchanged** on two platforms, overlaid by `platform`:
+        **fargate** (ECS, 2× 0.5 vCPU behind an ALB — the "before") vs **lambda-web** (Lambda Web Function, auto-scaled — the "after").
+        I/O endpoint `/api/documents/:id` for the fair load comparison; `/api/summarize` is a real **Amazon Bedrock (Claude Sonnet 4.5)** GenAI call. Instrumented with OpenTelemetry → Dynatrace.
+    "1":
+      type: data
+      title: "Per-request performance by platform (I/O endpoint)"
+      query: |
+        fetch spans
+        | filter service.name == "doc-intel-api" and span.kind == "server" and http.route == "/api/documents/:id"
+        | summarize requests = count(),
+            p50ms = round(percentile(toDouble(duration) / 1000000.0, 50), decimals: 1),
+            p95ms = round(percentile(toDouble(duration) / 1000000.0, 95), decimals: 1),
+            p99ms = round(percentile(toDouble(duration) / 1000000.0, 99), decimals: 1),
+            by: { platform }
+        | sort platform asc
+      visualization: table
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "2":
+      type: data
+      title: "Throughput (requests) by platform"
+      query: |
+        timeseries req = sum(app.requests), by: { platform }
+      visualization: lineChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "3":
+      type: data
+      title: "p95 latency (ms) by platform — I/O endpoint"
+      query: |
+        fetch spans
+        | filter service.name == "doc-intel-api" and span.kind == "server" and http.route == "/api/documents/:id"
+        | fieldsAdd durMs = toDouble(duration) / 1000000.0
+        | makeTimeseries p95 = percentile(durMs, 95), by: { platform }
+      visualization: lineChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "4":
+      type: data
+      title: "In-flight concurrency by platform"
+      query: |
+        timeseries inflight = max(app.inflight), by: { platform }
+      visualization: lineChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "5":
+      type: data
+      title: "GenAI call latency (ms) by platform — Bedrock Sonnet"
+      query: |
+        timeseries genai_ms = avg(genai.request.duration), by: { platform }
+      visualization: lineChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "6":
+      type: data
+      title: "Bedrock calls by platform"
+      query: |
+        fetch spans
+        | filter service.name == "doc-intel-api" and span.kind == "client" and span.name == "bedrock.summarize"
+        | summarize calls = count(),
+            avgMs = round(avg(toDouble(duration) / 1000000.0), decimals: 0),
+            p95ms = round(percentile(toDouble(duration) / 1000000.0, 95), decimals: 0),
+            by: { platform }
+        | sort platform asc
+      visualization: table
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "7":
+      type: markdown
+      content: |
+        ## Finding
+        At equal, modest provisioning the two platforms deliver **near-identical per-request latency** (server-side p50 ≈ 40 ms on both) and **comparable throughput** (Web Functions ~400 req/s vs Fargate ~320 req/s). The Web Function reached that **with no capacity planning, no container image, no ALB, and no cluster** — and bills **active-CPU** (near-zero while waiting on Bedrock) instead of always-on vCPU/memory. Same `index.js`, redeployed with one command.
+    "8":
+      type: markdown
+      content: |
+        ## Scale tests — cold starts (#2) and CPU-bound concurrency (#4)
+        Same code under a **spiky burst** profile and a **CPU-bound** concurrency sweep. Through p99 the platforms are identical; they diverge on the **cold-start far tail** and on **CPU saturation**.
+    "9":
+      type: data
+      title: "Cold starts over time by platform"
+      query: |
+        timeseries coldstarts = sum(app.coldstart), by: { platform }
+      visualization: barChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "10":
+      type: data
+      title: "CPU endpoint p99 (ms) over time by platform"
+      query: |
+        fetch spans
+        | filter service.name == "doc-intel-api" and span.kind == "server" and http.route == "/api/cpu"
+        | fieldsAdd durMs = toDouble(duration) / 1000000.0
+        | makeTimeseries p99 = percentile(durMs, 99), by: { platform }
+      visualization: lineChart
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "11":
+      type: data
+      title: "Latency tail by platform (I/O endpoint) — cold starts live at p99.9+"
+      query: |
+        fetch spans
+        | filter service.name == "doc-intel-api" and span.kind == "server" and http.route == "/api/documents/:id"
+        | fieldsAdd durMs = toDouble(duration) / 1000000.0
+        | summarize requests = count(),
+            p50 = round(percentile(durMs, 50), decimals: 1),
+            p99 = round(percentile(durMs, 99), decimals: 1),
+            p999 = round(percentile(durMs, 99.9), decimals: 1),
+            maxMs = round(max(durMs), decimals: 1),
+            by: { platform }
+        | sort platform asc
+      visualization: table
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+    "12":
+      type: data
+      title: "CPU-bound latency by platform — fixed capacity saturates"
+      query: |
+        fetch spans
+        | filter service.name == "doc-intel-api" and span.kind == "server" and http.route == "/api/cpu"
+        | fieldsAdd durMs = toDouble(duration) / 1000000.0
+        | summarize requests = count(),
+            p50 = round(percentile(durMs, 50), decimals: 1),
+            p95 = round(percentile(durMs, 95), decimals: 1),
+            p99 = round(percentile(durMs, 99), decimals: 1),
+            maxMs = round(max(durMs), decimals: 1),
+            by: { platform }
+        | sort platform asc
+      visualization: table
+      visualizationSettings:
+        autoSelectVisualization: false
+      davis:
+        enabled: false
+  layouts:
+    "0": { x: 0, "y": 0, w: 24, h: 2 }
+    "1": { x: 0, "y": 2, w: 24, h: 5 }
+    "2": { x: 0, "y": 7, w: 12, h: 6 }
+    "3": { x: 12, "y": 7, w: 12, h: 6 }
+    "4": { x: 0, "y": 13, w: 12, h: 6 }
+    "5": { x: 12, "y": 13, w: 12, h: 6 }
+    "6": { x: 0, "y": 19, w: 12, h: 5 }
+    "7": { x: 12, "y": 19, w: 12, h: 5 }
+    "8": { x: 0, "y": 24, w: 24, h: 2 }
+    "9": { x: 0, "y": 26, w: 12, h: 6 }
+    "10": { x: 12, "y": 26, w: 12, h: 6 }
+    "11": { x: 0, "y": 32, w: 12, h: 5 }
+    "12": { x: 12, "y": 32, w: 12, h: 5 }

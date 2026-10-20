@@ -1,0 +1,14 @@
+node_modules/
+.venv/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+build.log
+__pycache__/
+*.pyc
+.DS_Store
+one-pager-preview.html
+.uv-cache/

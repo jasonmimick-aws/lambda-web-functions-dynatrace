@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>doc-intel-api · Lambda Web Functions × Dynatrace demo</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#141925; --panel2:#1b2130; --line:#2a3344;
+    --txt:#e6edf3; --dim:#8b98ad; --acc:#5ac8fa; --ok:#7ee787; --err:#ff7b72;
+    --lw:#b388ff; --fg:#ffa657;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{padding:20px 28px;border-bottom:1px solid var(--line)}
+  .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  h1{font-size:18px;margin:0;font-weight:680}
+  .lede{color:var(--dim);font-size:13.5px;margin:8px 0 0;max-width:900px}
+  .lede b{color:var(--txt)}
+  .badge{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--line)}
+  .badge.lambda-web{background:rgba(179,136,255,.15);color:var(--lw);border-color:rgba(179,136,255,.45)}
+  .badge.fargate{background:rgba(255,166,87,.15);color:var(--fg);border-color:rgba(255,166,87,.45)}
+  .badge.local{background:rgba(90,200,250,.12);color:var(--acc)}
+  main{max-width:1080px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .full{grid-column:1 / -1}
+  .step{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#06121c;font-weight:800;font-size:12px;margin-right:8px}
+  .card h2{font-size:15px;margin:0 0 4px;font-weight:650;display:flex;align-items:center}
+  .hint{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+  button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;transition:.15s}
+  button:hover{border-color:var(--acc);color:var(--acc)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.primary{background:var(--acc);color:#06121c;border-color:var(--acc);font-weight:700}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+  .out{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:14px;min-height:52px;white-space:pre-wrap;font-size:14px}
+  .doc{display:flex;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:.12s}
+  .doc:hover{border-color:var(--acc);background:var(--panel2)}
+  .doc .t{font-weight:600}
+  .doc .p{color:var(--dim);font-size:12px;margin-top:2px}
+  .doc.sel{border-color:var(--acc);background:rgba(90,200,250,.08)}
+  .stat{display:inline-flex;flex-direction:column;gap:2px;margin-right:22px}
+  .stat b{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+  .pill{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .log{font:12px/1.6 ui-monospace,Menlo,monospace;color:var(--dim);max-height:150px;overflow:auto}
+  a{color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>📄 doc-intel-api</h1>
+    <span>running on <span id="platform" class="badge local">…</span></span>
+    <span style="flex:1"></span>
+    <a id="dash" href="#" target="_blank" class="pill">↗ open Dynatrace dashboard</a>
+  </div>
+  <p class="lede">A demo document-service. The <b>exact same code</b> runs on <b>AWS Fargate</b> and on an <b>AWS Lambda Web Function</b> — the badge shows which one served this page. It serves documents, summarizes them with <b>Amazon Bedrock (Claude Sonnet)</b>, and every request is traced to <b>Dynatrace</b>. Use the panels below, then watch it all appear on the dashboard.</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2><span class="step">1</span>Browse the library</h2>
+    <p class="hint">Full-length public-domain books served by the API — hundreds of thousands of words each. Click one to open it (an I/O call to the datastore for its metadata).</p>
+    <div id="docs"><em style="color:var(--dim)">loading…</em></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span>Summarize a whole book with AI</h2>
+    <p class="hint">A single book is far larger than any model's context window, so <b>Summarize</b> runs <b>map-reduce</b>: it samples sections across the book, summarizes them with <b>Amazon Bedrock (Claude Sonnet)</b> in parallel, then streams one combined summary. Lots of concurrent, I/O-bound model calls — the Web Functions sweet spot.</p>
+    <div id="reader" class="out">← pick a book on the left</div>
+    <div class="row">
+      <button id="summarize" class="primary" disabled>✨ Summarize this book</button>
+      <span class="pill" id="genMeta"></span>
+    </div>
+    <div id="progress" class="hint" style="margin:6px 0 0"></div>
+    <div id="summary" class="out" style="display:none"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span>Generate traffic — I/O</h2>
+    <p class="hint">Fire many document reads at once (each waits ~40 ms on the datastore). This is the everyday web-API load; watch throughput and latency on the dashboard.</p>
+    <div class="row">
+      <button data-n="20" class="io">20 requests</button>
+      <button data-n="100" class="io">100 requests</button>
+      <button data-n="300" class="io">300 requests</button>
+    </div>
+    <div id="ioOut" class="out">—</div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span>Generate traffic — CPU</h2>
+    <p class="hint">Fire requests that burn real CPU (not just waiting). This stresses the compute model differently — useful for comparing how each platform handles CPU-heavy load.</p>
+    <div class="row">
+      <button data-n="20" data-ms="40" class="cpu">20 × light</button>
+      <button data-n="60" data-ms="40" class="cpu">60 × light</button>
+      <button data-n="60" data-ms="120" class="cpu">60 × heavy</button>
+    </div>
+    <div id="cpuOut" class="out">—</div>
+  </section>
+
+  <section class="card full">
+    <h2>Activity log</h2>
+    <div id="log" class="log"></div>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const log = (m, cls="") => { const l=$("#log"); l.innerHTML = `<div style="color:var(--${cls||'dim'})">${new Date().toLocaleTimeString()}  ${m}</div>` + l.innerHTML; };
+let PLATFORM = "local", SELECTED = null;
+const DASH = "https://hgd83841.apps.dynatrace.com/ui/apps/dynatrace.dashboards/dashboard/f3ca99fa-72b5-47c1-9420-6a83e8d0c104";
+$("#dash").href = DASH;
+
+async function loadInfo(){
+  try{ const j = await (await fetch("/api/info")).json();
+    PLATFORM = j.platform;
+    const b = $("#platform"); b.textContent = j.platform; b.className = "badge " + j.platform;
+    log(`served by <b>${j.platform}</b> · ${j.region} · ${j.model}`);
+  }catch(e){ log("could not load /api/info","err"); }
+}
+
+async function loadDocs(){
+  const docs = await (await fetch("/api/documents")).json();
+  $("#docs").innerHTML = docs.map(d =>
+    `<div class="doc" data-id="${d.id}"><div><div class="t">${d.title}</div><div class="p">${d.author} · ${d.words.toLocaleString()} words · ${d.size} · ${d.sections} sections</div></div><span class="pill">open →</span></div>`).join("");
+  document.querySelectorAll(".doc").forEach(el => el.onclick = () => openDoc(+el.dataset.id, el));
+}
+
+async function openDoc(id, el){
+  document.querySelectorAll(".doc").forEach(d => d.classList.remove("sel"));
+  el.classList.add("sel");
+  const t0 = performance.now();
+  const d = await (await fetch("/api/documents/"+id)).json();
+  SELECTED = d;
+  $("#reader").innerHTML = `<b>${d.title}</b> — ${d.author}\n${d.words.toLocaleString()} words · ${d.size} · ${d.sections} sections\n\n<span style="color:var(--dim)">${d.preview||''}</span>`;
+  $("#summarize").disabled = false;
+  $("#summary").style.display = "none"; $("#progress").textContent = "";
+  log(`opened "${d.title}" in ${Math.round(performance.now()-t0)}ms (datastore ${d.downstreamMs}ms)`, PLATFORM==='local'?'':PLATFORM);
+}
+
+$("#summarize").onclick = async () => {
+  if(!SELECTED) return;
+  const btn = $("#summarize"); btn.disabled = true;
+  const out = $("#summary"); out.style.display="block"; out.textContent=""; $("#genMeta").textContent="working…"; $("#progress").textContent="";
+  const t0 = performance.now();
+  try{
+    const r = await fetch("/api/summarize/stream",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id:SELECTED.id})});
+    const reader = r.body.getReader(); const dec=new TextDecoder(); let buf="";
+    while(true){ const {done,value}=await reader.read(); if(done)break; buf+=dec.decode(value,{stream:true});
+      let i; while((i=buf.indexOf("\n\n"))>=0){ const line=buf.slice(0,i).trim(); buf=buf.slice(i+2);
+        if(!line.startsWith("data:"))continue; const ev=JSON.parse(line.slice(5).trim());
+        if(ev.type==="start"){ $("#progress").textContent=`sampling ${ev.sampledSections} of ${ev.totalSections} sections · ${ev.concurrency} concurrent Bedrock calls…`; }
+        else if(ev.type==="progress"){ $("#progress").textContent=`summarizing sections ${ev.done}/${ev.total}…`; }
+        else if(ev.type==="reduce"){ $("#progress").textContent="combining section summaries into final summary…"; }
+        else if(ev.text){ out.textContent+=ev.text; }
+        else if(ev.type==="done"){ $("#progress").textContent=""; $("#genMeta").textContent=`${ev.bedrockCalls} Bedrock calls · first result ${(ev.ttftMs/1000).toFixed(1)}s · total ${(ev.totalMs/1000).toFixed(1)}s`; log(`summarized "${SELECTED.title}" — ${ev.bedrockCalls} Bedrock calls, ${(ev.totalMs/1000).toFixed(1)}s total`, PLATFORM==='local'?'':PLATFORM); }
+        else if(ev.error){ out.textContent+="\n[error] "+ev.error; }
+      }
+    }
+  }catch(e){ out.textContent="error: "+e; }
+  btn.disabled=false;
+};
+
+async function fireLoad(path,n,outEl,label){
+  outEl.textContent=`sending ${n} requests…`;
+  const t0=performance.now(); const lat=[]; let ok=0, plat="";
+  await Promise.all(Array.from({length:n},async()=>{ const s=performance.now();
+    try{ const r=await fetch(path); plat=r.headers.get("x-platform")||plat; if(r.ok)ok++; await r.text(); lat.push(performance.now()-s);}catch(e){} }));
+  const wall=Math.round(performance.now()-t0); lat.sort((a,b)=>a-b);
+  const pct=p=>Math.round(lat[Math.min(lat.length-1,Math.floor(lat.length*p/100))]||0);
+  outEl.innerHTML=`<div><span class="stat"><b>${ok}/${n}</b><span>ok</span></span><span class="stat"><b>${Math.round(n/(wall/1000))}</b><span>req/s</span></span><span class="stat"><b>${pct(50)}ms</b><span>p50</span></span><span class="stat"><b>${pct(95)}ms</b><span>p95</span></span><span class="stat"><b>${pct(99)}ms</b><span>p99</span></span></div><div class="hint" style="margin-top:8px">Now open the Dynatrace dashboard to see this traffic on the <b>${plat}</b> line.</div>`;
+  log(`${label}: ${n} reqs → ${Math.round(n/(wall/1000))} req/s, p95 ${pct(95)}ms`, plat==='local'?'':plat);
+}
+document.querySelectorAll("button.io").forEach(b=>b.onclick=()=>fireLoad(`/api/documents/${1+Math.floor(Math.random()*6)}`,+b.dataset.n,$("#ioOut"),`I/O ${b.dataset.n}×`));
+document.querySelectorAll("button.cpu").forEach(b=>b.onclick=()=>fireLoad(`/api/cpu?ms=${b.dataset.ms}`,+b.dataset.n,$("#cpuOut"),`CPU ${b.dataset.n}×${b.dataset.ms}ms`));
+
+loadInfo(); loadDocs();
+</script>
+</body>
+</html>

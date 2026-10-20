@@ -1,0 +1,24 @@
+{
+  "name": "lambda-web-dynatrace-poc",
+  "version": "1.0.0",
+  "description": "AWS Lambda Web Functions + Dynatrace OpenTelemetry POC",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "AWS_LAMBDA_HTTP_ENDPOINT=127.0.0.1:3000 node index.js"
+  },
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/auto-instrumentations-node": "^0.81.0",
+    "@opentelemetry/exporter-metrics-otlp-proto": "^0.223.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.223.0",
+    "@opentelemetry/resources": "^2.12.0",
+    "@opentelemetry/sdk-metrics": "^2.12.0",
+    "@opentelemetry/sdk-node": "^0.223.0",
+    "@opentelemetry/sdk-trace-node": "^2.12.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "express": "^5.3.0"
+  }
+}
