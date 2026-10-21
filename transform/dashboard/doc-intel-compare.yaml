@@ -1,5 +1,4 @@
 name: "Fargate → Lambda Web Functions — Transformation (Dynatrace)"
-id: f3ca99fa-72b5-47c1-9420-6a83e8d0c104
 type: dashboard
 content:
   version: 21

@@ -13,7 +13,9 @@ app.use(express.json({ limit: '1mb' }));
 
 // Port resolution: Lambda Web Functions set AWS_LAMBDA_HTTP_ENDPOINT (host:port);
 // containers (Fargate) just get PORT. Same code, both platforms.
-let host = '0.0.0.0';
+// Local development is loopback-only. Fargate listens on all container
+// interfaces because the task ENI and ALB are the network boundary.
+let host = PLATFORM === 'fargate' ? '0.0.0.0' : '127.0.0.1';
 let port = process.env.PORT || 8080;
 if (process.env.AWS_LAMBDA_HTTP_ENDPOINT) {
   [host, port] = process.env.AWS_LAMBDA_HTTP_ENDPOINT.split(':');
@@ -123,7 +125,7 @@ async function downstream(name, ms, attrs = {}) {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/info', (req, res) =>
-  res.json({ service: 'doc-intel-api', platform: PLATFORM, runtime: process.version, region: process.env.AWS_REGION || 'local', model: MODEL_ID })
+  res.json({ service: 'doc-intel-api', platform: PLATFORM, runtime: process.version, region: process.env.AWS_REGION || 'local', model: MODEL_ID, dashboardUrl: process.env.DASHBOARD_URL || null })
 );
 
 app.get('/health', (req, res) => res.json({ status: 'ok', platform: PLATFORM }));

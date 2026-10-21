@@ -88,4 +88,4 @@ For stateless, input/output-bound, bursty, or generative-AI Node.js services, AW
 
 ## Appendix
 
-The reproducible assets, namely the shared service, the Fargate baseline, the Lambda Web Function deployment, and the Dynatrace comparison dashboard, are contained in this repository and in the hgd83841 Dynatrace tenant. Measurements were taken in AWS account 347830095179, region us-east-1. The figures illustrate method and magnitude and do not constitute a pricing quotation.
+The reproducible assets, namely the shared service, the Fargate baseline, the Lambda Web Function deployment, and the Dynatrace comparison dashboard, are contained in this repository. Measurements were taken in a test AWS account in the us-east-1 region and exported to a test Dynatrace environment. The figures illustrate method and magnitude and do not constitute a pricing quotation.

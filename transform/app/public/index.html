@@ -108,12 +108,13 @@
 const $ = (s) => document.querySelector(s);
 const log = (m, cls="") => { const l=$("#log"); l.innerHTML = `<div style="color:var(--${cls||'dim'})">${new Date().toLocaleTimeString()}  ${m}</div>` + l.innerHTML; };
 let PLATFORM = "local", SELECTED = null;
-const DASH = "https://hgd83841.apps.dynatrace.com/ui/apps/dynatrace.dashboards/dashboard/f3ca99fa-72b5-47c1-9420-6a83e8d0c104";
-$("#dash").href = DASH;
+const dashLink = $("#dash");
+dashLink.style.display = "none";
 
 async function loadInfo(){
   try{ const j = await (await fetch("/api/info")).json();
     PLATFORM = j.platform;
+    if (j.dashboardUrl) { dashLink.href = j.dashboardUrl; dashLink.style.display = "inline"; }
     const b = $("#platform"); b.textContent = j.platform; b.className = "badge " + j.platform;
     log(`served by <b>${j.platform}</b> · ${j.region} · ${j.model}`);
   }catch(e){ log("could not load /api/info","err"); }
